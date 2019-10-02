@@ -1,0 +1,80 @@
+<workflow-app name="sample-wf" xmlns="uri:oozie:workflow:0.1">
+
+    <start to="hotel-recommendations-spark-job" />
+
+    <action name="hotel-recommendations-spark-job">
+        <spark xmlns="uri:oozie:spark-action:0.1">
+            <job-tracker>sandbox-hdp.hortonworks.com:8050</job-tracker>
+            <name-node>hdfs://sandbox-hdp.hortonworks.com:8020</name-node>
+
+            <prepare>
+                <delete path="${sparkJobOutput}"/>
+            </prepare>
+            <configuration>
+                <property>
+                    <name>mapred.compress.map.output</name>
+                    <value>true</value>
+                </property>
+
+                <property>
+                    <name>mapred.job.queue.name</name>
+                    <value>${queueName}</value>
+                </property>
+            </configuration>
+
+            <master>yarn-cluster</master>
+
+            <name>Spark Hotel Recommendations</name>
+            <class>com.epam.bigdata.training.spark.hotels.Task1HotelsApplication</class>
+            <jar>${nameNode}/user/oozie/hotels-2.11.jar</jar>
+            <spark-opts>
+                --conf spark.driver.memory=512M
+                --conf spark.executor.memory=512M
+                --conf spark.memory.offHeap.enabled=true
+                --conf spark.memory.offHeap.size=1G
+                --conf spark.sql.shuffle.partitions=8
+                --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
+            </spark-opts>
+            <arg>${nameNode}${sparkJobSource}</arg>
+            <arg>${nameNode}${sparkJobOutput}</arg>
+        </spark>
+
+        <ok to="copy-to-output-target" />
+        <error to="fail" />
+    </action>
+
+    <action name="copy-to-output-target">
+        <shell xmlns="uri:oozie:shell-action:0.1">
+            <job-tracker>${jobTracker}</job-tracker>
+            <name-node>${nameNode}</name-node>
+
+            <prepare>
+                <delete path="${nameNode}${copyJobTarget}"/>
+            </prepare>
+
+            <configuration>
+                <property>
+                    <name>mapred.job.queue.name</name>
+                    <value>${queueName}</value>
+                </property>
+            </configuration>
+            <exec>hdfs</exec>
+            <argument>dfs</argument>
+            <argument>-cp</argument>
+            <argument>${nameNode}${sparkJobOutput}</argument>
+            <argument>${nameNode}${copyJobTarget}</argument>
+        </shell>
+
+        <ok to="end" />
+        <error to="fail" />
+    </action>
+
+    <kill name="fail">
+        <message>Workflow failed, error
+            message[${wf:errorMessage(wf:lastErrorNode())}]
+        </message>
+    </kill>
+
+    <end name='end' />
+
+</workflow-app>
